@@ -32,7 +32,7 @@ class SCAR(BaseModelClass):
     Parameters
     ----------
     adata
-        AnnData object that has been registered via :meth:`~mypackage.MyPyroModel.setup_anndata`.
+        AnnData object that has been registered via :meth:`~scvi_external.SCAR.setup_anndata`.
     n_hidden
         Number of nodes per hidden layer.
     n_latent
@@ -40,13 +40,13 @@ class SCAR(BaseModelClass):
     n_layers
         Number of hidden layers used for encoder and decoder NNs.
     **model_kwargs
-        Keyword args for :class:`~mypackage.MyModule`
+        Keyword args for :class:`~scvi_external.SCAR`
 
     Examples
     --------
     >>> adata = anndata.read_h5ad(path_to_anndata)
-    >>> mypackage.MyPyroModel.setup_anndata(adata, batch_key="batch")
-    >>> vae = mypackage.MyModel(adata)
+    >>> scvi_external.SCAR.setup_anndata(adata, batch_key="batch")
+    >>> vae = scvi_external.SCAR(adata)
     >>> vae.train()
     >>> adata.obsm["X_mymodel"] = vae.get_latent_representation()
     """
@@ -82,7 +82,7 @@ class SCAR(BaseModelClass):
             ambient_profile = torch.from_numpy(np.asarray(ambient_profile)).float().reshape(1, -1)
 
         self.module = SCAR_VAE(
-            amb_prob=ambient_profile,
+            ambient_profile=ambient_profile,
             n_input=self.summary_stats["n_vars"],
             n_hidden=n_hidden,
             n_latent=n_latent,
