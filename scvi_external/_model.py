@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Union, Sequence
+from typing import List, Optional, Union
 
 from anndata import AnnData
 import matplotlib.pyplot as plt
@@ -15,11 +15,15 @@ from scvi.data.fields import (
     NumericalObsField,
 )
 from scvi.model._utils import _init_library_size
-from scvi.model.base import BaseModelClass, UnsupervisedTrainingMixin, VAEMixin, RNASeqMixin, ArchesMixin
+from scvi.model.base import (
+    BaseModelClass,
+    UnsupervisedTrainingMixin,
+    VAEMixin,
+    RNASeqMixin,
+    ArchesMixin,
+)
 from scvi.utils import setup_anndata_dsp
-from scvi.model._utils import _get_batch_code_from_category
 from scvi._compat import Literal
-from scvi._types import Number
 import seaborn as sns
 import torch
 from torch.distributions.multinomial import Multinomial
@@ -29,9 +33,14 @@ from ._module import SCAR_VAE
 logger = logging.getLogger(__name__)
 
 
-class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass):
+class SCAR(
+    RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseModelClass
+):
     """
-    Skeleton for an scvi-tools model.
+    Ambient RNA removal in scRNA-seq data
+    Publication: \
+        [Probabilistic machine learning ensures accurate ambient denoising in droplet-based single-cell omics](https://www.biorxiv.org/content/10.1101/2022.01.14.476312v4).
+    Original Github: https://github.com/Novartis/scar.
 
     Please use this skeleton to create new models.
 
@@ -40,7 +49,8 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
     adata
         AnnData object that has been registered via :meth:`~scvi_external.SCAR.setup_anndata`.
     ambient_profile
-        The probability of occurrence of each ambient transcript.
+        The probability of occurrence of each ambient transcript.\
+            If None, averaging cells to estimate the ambient profile, by default None.
     n_hidden
         Number of nodes per hidden layer.
     n_latent
@@ -67,8 +77,8 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
     scale_activation
         Activation layer to use for px_scale_decoder
     sparsity
-        The sparsity of expected native signals. It varies between datasets, 
-        e.g. if one prefilters genes -- use only highly variable genes -- 
+        The sparsity of expected native signals. It varies between datasets,
+        e.g. if one prefilters genes -- use only highly variable genes --
         the sparsity should be low; on the other hand, it should be set high
         in the case of unflitered genes.
     **model_kwargs
@@ -76,16 +86,20 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
     Examples
     --------
     >>> adata = anndata.read_h5ad(path_to_anndata)
+    >>> raw_adata = anndata.read_h5ad(path_to_raw_anndata)
     >>> scvi_external.SCAR.setup_anndata(adata, batch_key="batch")
+    >>> scvi_external.SCAR.get_ambient_profile(adata=adata, raw_adata=raw_adata, feature_type="mRNA")
     >>> vae = scvi_external.SCAR(adata)
     >>> vae.train()
-    >>> adata.obsm["X_mymodel"] = vae.get_latent_representation()
+    >>> adata.obsm["X_scAR"] = vae.get_latent_representation()
+    >>> posterior_preds = vae.posterior_predictive_sample(n_samples=15)
+    >>> adata.layers['denoised'] = sp.sparse.csr_matrix(np.median(posterior_preds, axis=-1))
     """
 
     def __init__(
         self,
         adata: AnnData,
-        ambient_profile: Union[str, np.ndarray, pd.DataFrame, torch.tensor] = "ambient_profile",
+        ambient_profile: Union[str, np.ndarray, pd.DataFrame, torch.tensor] = None,
         n_hidden: int = 128,
         n_latent: int = 10,
         n_layers: int = 1,
@@ -131,7 +145,9 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
                 raise TypeError(
                     f"Expecting str / np.array / None / pd.DataFrame, but get a {type(ambient_profile)}"
                 )
-            ambient_profile = torch.from_numpy(np.asarray(ambient_profile)).float().reshape(1, -1)
+            ambient_profile = (
+                torch.from_numpy(np.asarray(ambient_profile)).float().reshape(1, -1)
+            )
 
         self.module = SCAR_VAE(
             ambient_profile=ambient_profile,
@@ -167,7 +183,6 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
             latent_distribution,
         )
         self.init_params_ = self._get_init_params(locals())
-        
 
     @classmethod
     @setup_anndata_dsp.dedent
@@ -281,16 +296,15 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
             sc.pp.filter_genes(adata, max_counts=6000);
             sc.pp.filter_cells(adata, min_genes=200);
             # setup anndata
-            setup_anndata(
+            SCAR.get_ambient_profile(
                 adata,
                 adata_raw,
-                feature_type = "Gene Expression",
-                prob = 0.975,
-                min_raw_counts = 2,
-                kneeplot = True,
+                feature_type="mRNA",
+                prob=0.975,
+                min_raw_counts=2,
+                kneeplot=True,
             )
         """
-
         if feature_type is None:
             feature_type = adata.var["feature_types"].unique()
         elif isinstance(feature_type, str):
@@ -335,30 +349,23 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
                     probs=torch.tensor(ambient_prof), validate_args=False
                 ).log_prob(torch.Tensor(count_batch))
                 log_prob.append(log_prob_batch)
-
             log_prob = np.concatenate(log_prob, axis=0)
             raw_adata.obs["log_prob"] = log_prob
             raw_adata.obs["droplets"] = "other droplets"
-
             # cell-containing droplets
             raw_adata.obs.loc[
                 raw_adata.obs_names.isin(adata.obs_names), "droplets"
             ] = "cells"
-
             # identify cell-free droplets
             raw_adata.obs["droplets"] = raw_adata.obs["droplets"].mask(
                 raw_adata.obs["log_prob"] >= np.log(prob) * raw_adata.shape[1],
                 "cell-free droplets",
             )
             emptydrops = raw_adata[raw_adata.obs["droplets"] == "cell-free droplets"]
-
             if emptydrops.shape[0] < 50:
                 raise Exception("Too few emptydroplets! Lower the prob parameter")
-
             ambient_prof = emptydrops.X.sum(axis=0) / emptydrops.X.sum()
-
             i += 1
-
             if verbose:
                 print("iteration: ", i)
 
@@ -382,7 +389,9 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
                 .rename_axis("rank_by_counts")
                 .reset_index()
             )
-            all_droplets = all_droplets.loc[all_droplets["total_counts"] >= min_raw_counts]
+            all_droplets = all_droplets.loc[
+                all_droplets["total_counts"] >= min_raw_counts
+            ]
             all_droplets = all_droplets.set_index(index_name).rename_axis("cells")
             all_droplets = (
                 all_droplets.sort_values(by="log_prob", ascending=True)
@@ -427,4 +436,3 @@ class SCAR(RNASeqMixin, ArchesMixin, VAEMixin, UnsupervisedTrainingMixin, BaseMo
             ax.set_xlabel("sorted droplets")
             ax.set_title("cell-free droplets have relatively higher probs")
             plt.tight_layout()
-

@@ -29,13 +29,13 @@ class SCAR_VAE(PyroBaseModuleClass):
     """
 
     def __init__(
-        self, 
+        self,
         ambient_profile: torch.tensor,
-        n_input: int, 
-        n_latent: int, 
-        n_hidden: int, 
+        n_input: int,
+        n_latent: int,
+        n_hidden: int,
         n_layers: int,
-        sparsity: float
+        sparsity: float,
     ):
 
         super().__init__()
@@ -60,10 +60,10 @@ class SCAR_VAE(PyroBaseModuleClass):
             n_layers=n_layers,
             n_hidden=n_hidden,
             scale_activation="softplus",
-            sparsity=self.sparsity
+            sparsity=self.sparsity,
         )
         # This gene-level parameter modulates the variance of the observation distribution
-        self.px_r = torch.nn.Parameter(torch.ones(self.n_input))
+        self.px_r = nn.Parameter(torch.ones(self.n_input))
 
     @staticmethod
     def _get_fn_args_from_batch(tensor_dict):
@@ -81,13 +81,19 @@ class SCAR_VAE(PyroBaseModuleClass):
             # sample from prior (value will be sampled by guide when computing the ELBO)
             z = pyro.sample("latent", dist.Normal(z_loc, z_scale).to_event(1))
             # decode the latent code z
-            px_scale, px_noise_ratio, _, px_rate, px_dropout = self.decoder("gene", z, log_library)
+            px_scale, px_noise_ratio, _, px_rate, px_dropout = self.decoder(
+                "gene", z, log_library
+            )
             # build count distribution
             nb_logits = (px_rate + self.epsilon).log() - (
                 self.px_r.exp() + self.epsilon
             ).log()
             # model logits for counts and ambient separately
-            total_logits = nb_logits * (1-px_noise_ratio) + (self.ambient_profile.to(x.device) + self.epsilon).log() * px_noise_ratio
+            total_logits = (
+                nb_logits * (1 - px_noise_ratio)
+                + (self.ambient_profile.to(x.device) + self.epsilon).log()
+                * px_noise_ratio
+            )
             x_dist = dist.ZeroInflatedNegativeBinomial(
                 gate_logits=px_dropout, total_count=self.px_r.exp(), logits=total_logits
             )
@@ -107,9 +113,10 @@ class SCAR_VAE(PyroBaseModuleClass):
     def generative(self, x, log_library):
         z_loc, z_scale, _ = self.encoder(x)
         z = dist.Normal(z_loc, z_scale).sample()
-        px_scale, px_noise_ratio, _, px_rate, px_dropout = self.decoder("gene", z, log_library)
-        return (1-px_noise_ratio) * px_rate
-        
+        px_scale, px_noise_ratio, _, px_rate, px_dropout = self.decoder(
+            "gene", z, log_library
+        )
+        return (1 - px_noise_ratio) * px_rate
 
     @torch.no_grad()
     @auto_move_data

@@ -54,7 +54,7 @@ class SCAR(BaseModelClass):
     def __init__(
         self,
         adata: AnnData,
-        ambient_profile: torch.tensor = 'ambient_profile',
+        ambient_profile: torch.tensor = "ambient_profile",
         n_hidden: int = 128,
         n_latent: int = 10,
         n_layers: int = 1,
@@ -68,9 +68,13 @@ class SCAR(BaseModelClass):
             if isinstance(ambient_profile, str):
                 ambient_profile = adata.uns[ambient_profile].fillna(0).values
             elif isinstance(ambient_profile, pd.DataFrame):
-                ambient_profile = ambient_profile.fillna(0).values  # missing vals -> zeros
+                ambient_profile = ambient_profile.fillna(
+                    0
+                ).values  # missing vals -> zeros
             elif isinstance(ambient_profile, np.ndarray):
-                ambient_profile = np.nan_to_num(ambient_profile)  # missing vals -> zeros
+                ambient_profile = np.nan_to_num(
+                    ambient_profile
+                )  # missing vals -> zeros
             elif not ambient_profile:
                 print(" ... Evaluate empty profile from cells")
                 ambient_profile = adata.X.sum(axis=0) / adata.X.sum(axis=0).sum()
@@ -79,7 +83,9 @@ class SCAR(BaseModelClass):
                 raise TypeError(
                     f"Expecting str / np.array / None / pd.DataFrame, but get a {type(ambient_profile)}"
                 )
-            ambient_profile = torch.from_numpy(np.asarray(ambient_profile)).float().reshape(1, -1)
+            ambient_profile = (
+                torch.from_numpy(np.asarray(ambient_profile)).float().reshape(1, -1)
+            )
 
         self.module = SCAR_VAE(
             ambient_profile=ambient_profile,

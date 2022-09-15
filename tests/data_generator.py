@@ -40,6 +40,7 @@ class scrnaseq:
         scRNAseq.generate(dirichlet_concentration_hyper=1)
         scRNAseq.heatmap(vmax=5)
     """
+
     def __init__(
         self, n_cells, n_celltypes, n_features, n_total_molecules=8000, capture_rate=0.7
     ):
@@ -93,14 +94,6 @@ class scrnaseq:
             [random.multinomial(n=tot_c, pvals=beta0) for tot_c in tot_count0]
         )
 
-        # add empty droplets
-        tot_count0_empty = random.negative_binomial(
-            n_total_mol, self.capture_rate, size=self.n_cells
-        )
-        ambient_signals_empty = np.vstack(
-            [random.multinomial(n=tot_c, pvals=beta0) for tot_c in tot_count0_empty]
-        )
-
         # simulate native signals
         tot_trails = random.randint(
             low=self.n_total_molecules / 2,
@@ -123,22 +116,20 @@ class scrnaseq:
         noise_ratio = tot_count0 / (tot_count0 + tot_count1)
 
         adata = anndata.AnnData(
-            obs, 
-            obs=pd.DataFrame(celltype, columns=['celltype']), 
-            var=pd.DataFrame(beta0, columns=['ambient_profile'])
+            obs,
+            obs=pd.DataFrame(celltype, columns=["celltype"]),
+            var=pd.DataFrame(beta0, columns=["ambient_profile"]),
         )
-        adata.obs['noise_ratio'] = noise_ratio
-        adata.layers['ambient_signals'] = ambient_signals
-        adata.layers['native_signals'] = native_signals
+        adata.obs["noise_ratio"] = noise_ratio
+        adata.layers["ambient_signals"] = ambient_signals
+        adata.layers["native_signals"] = native_signals
         # self.native_profile = beta_in_each_cell
         # self.total_counts = obs.sum(axis=1)
         # self.empty_droplets = ambient_signals_empty.astype(int)
         return adata
 
     @staticmethod
-    def heatmap(
-            adata, feature_type="mRNA", return_obj=False, vmin=0, vmax=10
-        ):
+    def heatmap(adata, feature_type="mRNA", return_obj=False, vmin=0, vmax=10):
         """Heatmap of synthetic data.
 
         Parameters
@@ -160,25 +151,25 @@ class scrnaseq:
             if return_obj, return a fig object
         """
         sort_cell_idx = []
-        ambient_profile_idx_sorted = adata.var['ambient_profile'].argsort()
+        ambient_profile_idx_sorted = adata.var["ambient_profile"].argsort()
         for f in ambient_profile_idx_sorted:
             sort_cell_idx += list(np.where(adata.obs["celltype"] == f)[0])
 
-        native_signals = adata.layers['native_signals'][sort_cell_idx][
+        native_signals = adata.layers["native_signals"][sort_cell_idx][
             :, ambient_profile_idx_sorted
         ]
-        ambient_signals = adata.layers['ambient_signals'][sort_cell_idx][
+        ambient_signals = adata.layers["ambient_signals"][sort_cell_idx][
             :, ambient_profile_idx_sorted
         ]
         obs = adata.X[sort_cell_idx][:, ambient_profile_idx_sorted]
         denoised_signals = None
-        if 'denoised_signals' in adata.layers:
-            denoised_signals = adata.layers['denoised_signals'][sort_cell_idx][
+        if "denoised_signals" in adata.layers:
+            denoised_signals = adata.layers["denoised_signals"][sort_cell_idx][
                 :, ambient_profile_idx_sorted
             ]
 
-        ncols = 4 if 'denoised_signals' in adata.layers else 3
-        figsize = (ncols*4, 4)
+        ncols = 4 if "denoised_signals" in adata.layers else 3
+        figsize = (ncols * 4, 4)
         fig, axs = plt.subplots(ncols=ncols, figsize=figsize)
         i = 0
         sns.heatmap(
@@ -195,7 +186,7 @@ class scrnaseq:
         axs[i].set_title("noisy observation")
         i += 1
 
-        if 'denoised_signals' in adata.layers:
+        if "denoised_signals" in adata.layers:
             sns.heatmap(
                 np.log2(denoised_signals + 1),
                 yticklabels=False,
