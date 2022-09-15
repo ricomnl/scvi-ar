@@ -1,5 +1,5 @@
 ========================
-mypackage documentation
+scAR documentation
 ========================
 
 Welcome! This is the corresponding documentation website for the `scvi-tools-skeleton

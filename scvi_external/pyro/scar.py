@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional, Sequence, Union
 
+import pandas as pd
 import numpy as np
 import torch
 from anndata import AnnData
@@ -17,12 +18,12 @@ from scvi.model.base import BaseModelClass
 from scvi.train import PyroTrainingPlan, TrainRunner
 from scvi.utils import setup_anndata_dsp
 
-from ._mypyromodule import MyPyroModule
+from .scar_vae import SCAR_VAE
 
 logger = logging.getLogger(__name__)
 
 
-class MyPyroModel(BaseModelClass):
+class SCAR(BaseModelClass):
     """
     Skeleton for a pyro version of a scvi-tools model.
 
@@ -31,7 +32,7 @@ class MyPyroModel(BaseModelClass):
     Parameters
     ----------
     adata
-        AnnData object that has been registered via :meth:`~mypackage.MyPyroModel.setup_anndata`.
+        AnnData object that has been registered via :meth:`~scvi_external.SCAR.setup_anndata`.
     n_hidden
         Number of nodes per hidden layer.
     n_latent
@@ -39,13 +40,13 @@ class MyPyroModel(BaseModelClass):
     n_layers
         Number of hidden layers used for encoder and decoder NNs.
     **model_kwargs
-        Keyword args for :class:`~mypackage.MyModule`
+        Keyword args for :class:`~scvi_external.SCAR`
 
     Examples
     --------
     >>> adata = anndata.read_h5ad(path_to_anndata)
-    >>> mypackage.MyPyroModel.setup_anndata(adata, batch_key="batch")
-    >>> vae = mypackage.MyModel(adata)
+    >>> scvi_external.SCAR.setup_anndata(adata, batch_key="batch")
+    >>> vae = scvi_external.SCAR(adata)
     >>> vae.train()
     >>> adata.obsm["X_mymodel"] = vae.get_latent_representation()
     """
@@ -53,20 +54,46 @@ class MyPyroModel(BaseModelClass):
     def __init__(
         self,
         adata: AnnData,
+        ambient_profile: torch.tensor = "ambient_profile",
         n_hidden: int = 128,
         n_latent: int = 10,
         n_layers: int = 1,
+        sparsity: float = 0.9,
         **model_kwargs,
     ):
-        super(MyPyroModel, self).__init__(adata)
+        super(SCAR, self).__init__(adata)
 
         # self.summary_stats provides information about anndata dimensions and other tensor info
+        if not torch.is_tensor(ambient_profile):
+            if isinstance(ambient_profile, str):
+                ambient_profile = adata.uns[ambient_profile].fillna(0).values
+            elif isinstance(ambient_profile, pd.DataFrame):
+                ambient_profile = ambient_profile.fillna(
+                    0
+                ).values  # missing vals -> zeros
+            elif isinstance(ambient_profile, np.ndarray):
+                ambient_profile = np.nan_to_num(
+                    ambient_profile
+                )  # missing vals -> zeros
+            elif not ambient_profile:
+                print(" ... Evaluate empty profile from cells")
+                ambient_profile = adata.X.sum(axis=0) / adata.X.sum(axis=0).sum()
+                ambient_profile = np.nan_to_num(ambient_profile)
+            else:
+                raise TypeError(
+                    f"Expecting str / np.array / None / pd.DataFrame, but get a {type(ambient_profile)}"
+                )
+            ambient_profile = (
+                torch.from_numpy(np.asarray(ambient_profile)).float().reshape(1, -1)
+            )
 
-        self.module = MyPyroModule(
+        self.module = SCAR_VAE(
+            ambient_profile=ambient_profile,
             n_input=self.summary_stats["n_vars"],
             n_hidden=n_hidden,
             n_latent=n_latent,
             n_layers=n_layers,
+            sparsity=sparsity,
             **model_kwargs,
         )
         self._model_summary_string = "Overwrite this attribute to get an informative representation for your model"

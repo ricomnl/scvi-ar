@@ -133,3 +133,5 @@ dmypy.json
 
 # vscode
 .vscode/settings.json
+
+**.h5ad
