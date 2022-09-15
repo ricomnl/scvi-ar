@@ -190,10 +190,7 @@ class DecoderSCAR(nn.Module):
 
 class SCAR_VAE(VAE):
     """
-    Skeleton Variational auto-encoder model.
-
-    Here we implement a basic version of scVI's underlying VAE [Lopez18]_.
-    This implementation is for instructional purposes only.
+    Slightly modified version of scVI's VAE model to enable ambient RNA removal in scRNA-seq data.
 
     Parameters
     ----------

@@ -42,8 +42,6 @@ class SCAR(
         [Probabilistic machine learning ensures accurate ambient denoising in droplet-based single-cell omics](https://www.biorxiv.org/content/10.1101/2022.01.14.476312v4).
     Original Github: https://github.com/Novartis/scar.
 
-    Please use this skeleton to create new models.
-
     Parameters
     ----------
     adata
