@@ -20,6 +20,7 @@ def test_scarmodel():
     model.get_latent_representation()
     model.get_marginal_ll(n_mc_samples=5)
     model.get_reconstruction_error()
+    model.posterior_predictive_sample(adata, n_samples=5)
     model.history
 
     # tests __repr__
